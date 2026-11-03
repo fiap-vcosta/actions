@@ -119,11 +119,17 @@ jobs:
 
 ### tf-apply / tf-destroy
 
+A **concurrency fica no caller** (não no reusable). O mesmo grupo no caller e no reusable deadlocka o job `uses:` — o reusable nunca sobe.
+
 ```yaml
 name: tf-apply
 
 on:
   workflow_dispatch:
+
+concurrency:
+  group: terraform-infra-db
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -132,11 +138,9 @@ permissions:
 jobs:
   apply:
     uses: fiap-vcosta/actions/.github/workflows/tf-apply.yml@main
-    with:
-      concurrency_group: terraform-infra-db
 ```
 
-Passos extras do `infra-k8s` (Gateway pós-apply, cleanup pré-destroy) ficam em **jobs do caller**, depois ou antes do reusable.
+Passos extras do `infra-k8s` (Gateway pós-apply, cleanup pré-destroy) ficam em **jobs do caller**, depois ou antes do reusable, cobertos pelo mesmo `concurrency` do workflow.
 
 ## Inputs principais
 
@@ -162,7 +166,8 @@ Secret: `SONAR_TOKEN`.
 | `working_directory` | `terraform` | |
 | `run_plan` | `true` | só CI |
 | `require_k8s_vars` | `false` | checa projeto/região/cluster e exporta `TF_VAR_*` |
-| `concurrency_group` | — | obrigatório em apply/destroy |
+
+Concurrency de apply/destroy: declarar no workflow caller, não nestes reusables.
 
 ### `build-push` / `deploy`
 
