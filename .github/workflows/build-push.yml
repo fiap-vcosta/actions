@@ -1,0 +1,77 @@
+name: build-push
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: Nome da imagem no Artifact Registry (sem registry/tag)
+        type: string
+        required: true
+      dockerfile:
+        description: Caminho do Dockerfile
+        type: string
+        required: false
+        default: Dockerfile
+      context:
+        description: Contexto do docker build
+        type: string
+        required: false
+        default: .
+
+concurrency:
+  group: build-push-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-push:
+    name: Build e push no Artifact Registry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check required org vars
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GCP_AR_REPOSITORY: ${{ vars.GCP_AR_REPOSITORY }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+        run: |
+          missing=()
+          for name in GCP_PROJECT_ID GCP_REGION GCP_AR_REPOSITORY GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT_EMAIL; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "org vars faltando: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker para o Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build e push
+        env:
+          IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPOSITORY }}/${{ inputs.image_name }}
+        run: |
+          tag="${GITHUB_SHA::7}"
+          docker build \
+            --file "${{ inputs.dockerfile }}" \
+            --tag "$IMAGE:$tag" \
+            --tag "$IMAGE:latest" \
+            "${{ inputs.context }}"
+          docker push "$IMAGE:$tag"
+          docker push "$IMAGE:latest"

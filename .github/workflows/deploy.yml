@@ -1,0 +1,147 @@
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: Nome da imagem no Artifact Registry (sem registry/tag)
+        type: string
+        required: true
+      deployment_name:
+        description: Nome do Deployment no cluster
+        type: string
+        required: true
+      smoke_url:
+        description: URL HTTPS para smoke após o rollout
+        type: string
+        required: true
+      k8s_namespace:
+        description: Namespace Kubernetes
+        type: string
+        required: false
+        default: tech-challenge
+      image_tag:
+        description: Tag da imagem a aplicar
+        type: string
+        required: false
+        default: latest
+
+concurrency:
+  group: deploy-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy no GKE
+    runs-on: ubuntu-latest
+    env:
+      K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check required org vars
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GCP_AR_REPOSITORY: ${{ vars.GCP_AR_REPOSITORY }}
+          GCP_GKE_CLUSTER_NAME: ${{ vars.GCP_GKE_CLUSTER_NAME }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+        run: |
+          missing=()
+          for name in GCP_PROJECT_ID GCP_REGION GCP_AR_REPOSITORY GCP_GKE_CLUSTER_NAME \
+                      GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT_EMAIL; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "org vars faltando: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+
+      - name: Credenciais do cluster
+        run: |
+          gcloud container clusters get-credentials "${{ vars.GCP_GKE_CLUSTER_NAME }}" \
+            --region "${{ vars.GCP_REGION }}" --dns-endpoint
+
+      - name: Namespace e service account
+        run: |
+          set -euo pipefail
+          if [[ -f k8s/namespace.yaml ]]; then
+            kubectl apply -f k8s/namespace.yaml
+          fi
+          if [[ -f k8s/serviceaccount.yaml ]]; then
+            kubectl apply -f k8s/serviceaccount.yaml
+          fi
+
+      - name: Aplicar manifests
+        env:
+          IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPOSITORY }}/${{ inputs.image_name }}:${{ inputs.image_tag }}
+          DD_SITE: ${{ vars.DD_SITE }}
+          DD_VERSION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          export IMAGE DD_VERSION
+          export DD_SITE="${DD_SITE:-datadoghq.com}"
+
+          apply_rendered() {
+            local src="$1"
+            local vars="$2"
+            local out
+            out="$(mktemp)"
+            envsubst "$vars" < "$src" > "$out"
+            kubectl apply -f "$out"
+          }
+
+          if [[ -f k8s/configmap.yaml ]]; then
+            apply_rendered k8s/configmap.yaml '${DD_SITE}'
+          fi
+          if [[ -f k8s/deployment.yaml ]]; then
+            apply_rendered k8s/deployment.yaml '${IMAGE} ${DD_VERSION}'
+          fi
+          for manifest in k8s/service.yaml k8s/hpa.yaml k8s/httproute.yaml; do
+            if [[ -f "$manifest" ]]; then
+              kubectl apply -f "$manifest"
+            fi
+          done
+
+          kubectl rollout status "deployment/${{ inputs.deployment_name }}" \
+            --namespace "$K8S_NAMESPACE" \
+            --timeout=10m
+
+      - name: Smoke HTTPS
+        env:
+          SMOKE_URL: ${{ inputs.smoke_url }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -fsS --max-time 10 "$SMOKE_URL" >/dev/null; then
+              {
+                echo "## Serviço no ar"
+                echo ""
+                echo "- Smoke: \`$SMOKE_URL\`"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 15
+          done
+
+          echo "Smoke HTTPS falhou após ~15 min: $SMOKE_URL" >&2
+          kubectl get httproute --namespace "$K8S_NAMESPACE" >&2 || true
+          kubectl describe "deployment/${{ inputs.deployment_name }}" --namespace "$K8S_NAMESPACE" >&2 || true
+          exit 1
