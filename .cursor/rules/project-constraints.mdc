@@ -1,0 +1,13 @@
+---
+description: Restrições do projeto (actions)
+alwaysApply: true
+---
+
+# Restrições do projeto (`actions`)
+
+- Escopo: **reusable workflows** de CI/CD (`workflow_call`). Callers nos repos consumidores.
+- Sem `tf-apply` / `tf-destroy` para o `infra-bootstrap`.
+- Sem WIF neste repo (`actions` fora de `ci_repositories`).
+- `building-blocks` não consome estes workflows.
+- README autocontido: sem referências a pastas fora do Git nem a numeração de documentos pessoais.
+- Pin Terraform alinhado aos repos de infra (`1.16.1` até haver mudança deliberada).

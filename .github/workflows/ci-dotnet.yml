@@ -1,0 +1,352 @@
+name: ci-dotnet
+
+on:
+  workflow_call:
+    inputs:
+      solution:
+        description: Caminho da solution
+        type: string
+        required: false
+        default: TechChallenge.sln
+      unit_project:
+        description: Projeto de testes unitários
+        type: string
+        required: false
+        default: tests/UnitTests/UnitTests.csproj
+      integration_project:
+        description: Projeto de testes de integração
+        type: string
+        required: false
+        default: tests/IntegrationTests/IntegrationTests.csproj
+      sonar_project_key:
+        description: Chave do projeto no SonarCloud
+        type: string
+        required: true
+      coverage_threshold:
+        description: Gate Coverlet (line e branch)
+        type: string
+        required: false
+        default: "80"
+      global_json_file:
+        description: Caminho do global.json
+        type: string
+        required: false
+        default: global.json
+      enable_github_packages:
+        description: Restore autenticado no GitHub Packages (fiap-vcosta)
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      SONAR_TOKEN:
+        required: true
+
+concurrency:
+  group: ci-dotnet-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        if: ${{ !inputs.enable_github_packages }}
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: ${{ inputs.global_json_file }}
+
+      - name: Setup .NET (GitHub Packages)
+        if: ${{ inputs.enable_github_packages }}
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: ${{ inputs.global_json_file }}
+          source-url: https://nuget.pkg.github.com/fiap-vcosta/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ github.token }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json', '.config/dotnet-tools.json', 'global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: |
+          dotnet restore "${{ inputs.solution }}"
+          dotnet tool restore
+
+      - name: Build
+        run: |
+          dotnet build "${{ inputs.solution }}" -c Release --no-restore \
+            /p:EnableNETAnalyzers=false \
+            /p:EnforceCodeStyleInBuild=false \
+            /p:RunAnalyzersDuringBuild=false
+
+      - name: InspectCode
+        run: |
+          dotnet tool run jb inspectcode "${{ inputs.solution }}" \
+            --no-build \
+            --severity=WARNING \
+            --output=inspectcode.sarif.json \
+            --format=Sarif \
+            --verbosity=WARN
+
+      - name: Summarize InspectCode results
+        id: inspect_summary
+        run: |
+          set -euo pipefail
+          REPORT=inspectcode.sarif.json
+          if [ ! -f "$REPORT" ]; then
+            echo "InspectCode report not found: $REPORT"
+            exit 1
+          fi
+
+          ERRORS=$(jq '[.runs[].results[]? | select((.level // "warning") == "error")] | length' "$REPORT")
+          WARNINGS=$(jq '[.runs[].results[]? | select((.level // "warning") == "warning")] | length' "$REPORT")
+          NOTES=$(jq '[.runs[].results[]? | select((.level // "warning") == "note" or (.level // "") == "none")] | length' "$REPORT")
+
+          {
+            echo "## InspectCode"
+            echo ""
+            echo "| Severity | Count |"
+            echo "|----------|------:|"
+            echo "| Error | ${ERRORS} |"
+            echo "| Warning | ${WARNINGS} |"
+            echo "| Note/other | ${NOTES} |"
+            echo ""
+            echo "Detalhes no artifact \`inspectcode-report\` (SARIF)."
+            if [ "$ERRORS" -gt 0 ]; then
+              echo ""
+              echo "### Errors (sample)"
+              echo ""
+              jq -r '.runs[].results[]? | select((.level // "warning") == "error") | "- `\(.ruleId // "unknown")`: \(.message.text // .message // "")"' "$REPORT" | head -50 || true
+            fi
+            if [ "$WARNINGS" -gt 0 ]; then
+              echo ""
+              echo "### Warnings (sample)"
+              echo ""
+              jq -r '.runs[].results[]? | select((.level // "warning") == "warning") | "- `\(.ruleId // "unknown")`: \(.message.text // .message // "")"' "$REPORT" | head -30 || true
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "::error::InspectCode found ${ERRORS} error(s). See Job Summary / artifact."
+          fi
+
+          if [ "$WARNINGS" -gt 0 ]; then
+            echo "::error::InspectCode found ${WARNINGS} warning(s). See Job Summary / artifact."
+          fi
+
+          if [ "$ERRORS" -gt 0 ] || [ "$WARNINGS" -gt 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload InspectCode report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: inspectcode-report
+          path: inspectcode.sarif.json
+          if-no-files-found: ignore
+          retention-days: 1
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        if: ${{ !inputs.enable_github_packages }}
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: ${{ inputs.global_json_file }}
+
+      - name: Setup .NET (GitHub Packages)
+        if: ${{ inputs.enable_github_packages }}
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: ${{ inputs.global_json_file }}
+          source-url: https://nuget.pkg.github.com/fiap-vcosta/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ github.token }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json', '.config/dotnet-tools.json', 'global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: |
+          dotnet restore "${{ inputs.solution }}"
+          dotnet tool restore
+
+      - name: Run unit tests with coverage gate
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/test-results/coverage"
+          dotnet test "${{ inputs.unit_project }}" \
+            -c Release \
+            --no-restore \
+            /p:EnableNETAnalyzers=false \
+            /p:EnforceCodeStyleInBuild=false \
+            /p:RunAnalyzersDuringBuild=false \
+            /p:CollectCoverage=true \
+            /p:CoverletOutputFormat=cobertura \
+            /p:CoverletOutput="${GITHUB_WORKSPACE}/test-results/coverage/coverage" \
+            '/p:Exclude=[*]*Migrations.*' \
+            /p:Threshold=${{ inputs.coverage_threshold }} \
+            /p:ThresholdType=line%2Cbranch \
+            /p:ThresholdStat=minimum
+
+      - name: Generate coverage report
+        if: always()
+        run: |
+          dotnet tool run reportgenerator \
+            "-reports:${GITHUB_WORKSPACE}/test-results/coverage/**/*.cobertura.xml;${GITHUB_WORKSPACE}/test-results/coverage/coverage.cobertura.xml" \
+            "-targetdir:${GITHUB_WORKSPACE}/test-results/coverage-report" \
+            "-reporttypes:Html;MarkdownSummaryGithub;TextSummary" \
+            "-title:Unit test coverage"
+
+      - name: Write coverage Job Summary
+        if: always()
+        run: |
+          if [ -f ./test-results/coverage-report/SummaryGithub.md ]; then
+            cat ./test-results/coverage-report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f ./test-results/coverage-report/Summary.txt ]; then
+            {
+              echo "## Unit test coverage"
+              echo ""
+              echo '```'
+              cat ./test-results/coverage-report/Summary.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Coverage summary not found." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: test-results/coverage-report/
+          if-no-files-found: warn
+          retention-days: 1
+
+  integration-tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        if: ${{ !inputs.enable_github_packages }}
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: ${{ inputs.global_json_file }}
+
+      - name: Setup .NET (GitHub Packages)
+        if: ${{ inputs.enable_github_packages }}
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: ${{ inputs.global_json_file }}
+          source-url: https://nuget.pkg.github.com/fiap-vcosta/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ github.token }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json', '.config/dotnet-tools.json', 'global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore "${{ inputs.solution }}"
+
+      - name: Run integration tests
+        run: |
+          dotnet test "${{ inputs.integration_project }}" \
+            -c Release \
+            --no-restore \
+            /p:EnableNETAnalyzers=false \
+            /p:EnforceCodeStyleInBuild=false \
+            /p:RunAnalyzersDuringBuild=false \
+            --logger "console;verbosity=normal"
+
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        if: ${{ !inputs.enable_github_packages }}
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: ${{ inputs.global_json_file }}
+
+      - name: Setup .NET (GitHub Packages)
+        if: ${{ inputs.enable_github_packages }}
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: ${{ inputs.global_json_file }}
+          source-url: https://nuget.pkg.github.com/fiap-vcosta/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ github.token }}
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Begin SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet tool run dotnet-sonarscanner begin \
+            /k:"${{ inputs.sonar_project_key }}" \
+            /o:"fiap-vcosta" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.qualitygate.wait=true \
+            /d:sonar.cs.cobertura.reportsPaths="${GITHUB_WORKSPACE}/test-results/coverage/coverage.cobertura.xml"
+
+      - name: Build
+        run: dotnet build "${{ inputs.solution }}" -c Release
+
+      - name: Run unit tests with coverage
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/test-results/coverage"
+          dotnet test "${{ inputs.unit_project }}" \
+            -c Release \
+            --no-build \
+            /p:EnableNETAnalyzers=false \
+            /p:EnforceCodeStyleInBuild=false \
+            /p:RunAnalyzersDuringBuild=false \
+            /p:CollectCoverage=true \
+            /p:CoverletOutputFormat=cobertura \
+            /p:CoverletOutput="${GITHUB_WORKSPACE}/test-results/coverage/coverage" \
+            '/p:Exclude=[*]*Migrations.*'
+
+      - name: End SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet tool run dotnet-sonarscanner end /d:sonar.token="${SONAR_TOKEN}"

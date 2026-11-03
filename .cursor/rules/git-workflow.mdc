@@ -1,0 +1,12 @@
+---
+description: Fluxo Git — sem commit/push direto em main
+alwaysApply: true
+---
+
+# Fluxo Git (`main`)
+
+- **Nunca** commit ou push direto em `main` (nem com admin bypass “por comodidade”).
+- Fluxo: branch a partir de `main` → commits na branch → **PR** → merge para `main`.
+- Commits pedindo “só commitar” / “já está em main”: **parar**, criar/usar branch de feature e abrir PR.
+- Branch protection / ruleset da org podem não estar ativos (ex. plano Free sem Team); a regra de processo **continua obrigatória**.
+- Não use `--force` em `main`. Não faça amend de commits já em `main` remoto.

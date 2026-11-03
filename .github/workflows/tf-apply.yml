@@ -1,0 +1,90 @@
+name: tf-apply
+
+on:
+  workflow_call:
+    inputs:
+      concurrency_group:
+        description: Grupo de concurrency do apply/destroy
+        type: string
+        required: true
+      terraform_version:
+        description: Versão do Terraform
+        type: string
+        required: false
+        default: "1.16.1"
+      working_directory:
+        description: Diretório do root module
+        type: string
+        required: false
+        default: terraform
+      require_k8s_vars:
+        description: Exigir vars de projeto/região/cluster e exportar TF_VAR_*
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: ${{ inputs.concurrency_group }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    name: Terraform apply
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working_directory }}
+    env:
+      TF_VAR_cluster_name: ${{ inputs.require_k8s_vars && vars.GCP_GKE_CLUSTER_NAME || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check required org vars
+        if: ${{ inputs.require_k8s_vars }}
+        working-directory: .
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+          GCP_GKE_CLUSTER_NAME: ${{ vars.GCP_GKE_CLUSTER_NAME }}
+        run: |
+          missing=()
+          for name in GCP_PROJECT_ID GCP_REGION \
+                      GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT_EMAIL \
+                      GCP_GKE_CLUSTER_NAME; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "vars faltando: ${missing[*]}" >&2
+            exit 1
+          fi
+
+          {
+            echo "TF_VAR_project_id=$GCP_PROJECT_ID"
+            echo "TF_VAR_region=$GCP_REGION"
+          } >> "$GITHUB_ENV"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve
