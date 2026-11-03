@@ -3,10 +3,6 @@ name: tf-destroy
 on:
   workflow_call:
     inputs:
-      concurrency_group:
-        description: Grupo de concurrency do apply/destroy
-        type: string
-        required: true
       terraform_version:
         description: Versão do Terraform
         type: string
@@ -22,10 +18,6 @@ on:
         type: boolean
         required: false
         default: false
-
-concurrency:
-  group: ${{ inputs.concurrency_group }}
-  cancel-in-progress: false
 
 permissions:
   contents: read
