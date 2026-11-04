@@ -41,7 +41,7 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
 
-Com `enable_github_packages: true`, o caller precisa de `packages: read` no job para o restore no GitHub Packages.
+Com `enable_github_packages: true`, o caller precisa de `packages: read` no job para o restore no GitHub Packages. O reusable exporta `NUGET_AUTH_TOKEN=${{ github.token }}` nos jobs .NET para o `%NUGET_AUTH_TOKEN%` do `nuget.config` do serviço expandir no `dotnet restore`/`build`/`test` (não só no `setup-dotnet`).
 
 
 ### CI Terraform (com plan em PR)
