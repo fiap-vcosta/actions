@@ -16,7 +16,7 @@ Reusable workflows de CI/CD da org [fiap-vcosta](https://github.com/fiap-vcosta)
 | `ci-dotnet` | Lint, unit (gate 80%), integração, SonarCloud |
 | `ci-terraform` | fmt / validate / plan opcional em PR |
 | `build-push` | Imagem no Artifact Registry |
-| `deploy` | Apply de manifests `k8s/`, rollout, smoke (sem criar secrets da app) |
+| `deploy` | Secret k8s (SM + org), manifests `k8s/`, rollout, smoke |
 | `tf-apply` / `tf-destroy` | Apply/destroy manuais via caller `workflow_dispatch` |
 
 ## Regras canônicas (resumo)

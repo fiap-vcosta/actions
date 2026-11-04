@@ -25,6 +25,33 @@ on:
         type: string
         required: false
         default: latest
+      sync_app_secret:
+        description: Criar/atualizar o Secret Kubernetes da app a partir do Secret Manager e org secrets
+        type: boolean
+        required: false
+        default: true
+      k8s_secret_name:
+        description: Nome do Secret no cluster (default = deployment_name)
+        type: string
+        required: false
+        default: ""
+      connection_string_sm_secret:
+        description: Id do secret no Secret Manager com ConnectionStrings__DefaultConnection (vazio = omitir)
+        type: string
+        required: false
+        default: ""
+      service_auth_sm_secret:
+        description: Id do secret no Secret Manager com ServiceAuth__Key (vazio = usar org secret SERVICE_AUTH_KEY)
+        type: string
+        required: false
+        default: ""
+    secrets:
+      DD_API_KEY:
+        description: API key Datadog (org)
+        required: false
+      SERVICE_AUTH_KEY:
+        description: Fallback de X-Service-Key quando service_auth_sm_secret está vazio
+        required: false
 
 concurrency:
   group: deploy-${{ github.repository }}
@@ -88,6 +115,51 @@ jobs:
           if [[ -f k8s/serviceaccount.yaml ]]; then
             kubectl apply -f k8s/serviceaccount.yaml
           fi
+
+      - name: Secret da aplicação
+        if: ${{ inputs.sync_app_secret }}
+        env:
+          SECRET_NAME: ${{ inputs.k8s_secret_name }}
+          DEPLOYMENT_NAME: ${{ inputs.deployment_name }}
+          CONNECTION_STRING_SM: ${{ inputs.connection_string_sm_secret }}
+          SERVICE_AUTH_SM: ${{ inputs.service_auth_sm_secret }}
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          SERVICE_AUTH_KEY: ${{ secrets.SERVICE_AUTH_KEY }}
+        run: |
+          set -euo pipefail
+          secret_name="${SECRET_NAME:-$DEPLOYMENT_NAME}"
+          from_args=()
+
+          if [[ -z "${DD_API_KEY}" ]]; then
+            echo "secret DD_API_KEY faltando (org/repo)" >&2
+            exit 1
+          fi
+          echo "::add-mask::$DD_API_KEY"
+          from_args+=(--from-literal=DD_API_KEY="$DD_API_KEY")
+
+          if [[ -n "${CONNECTION_STRING_SM}" ]]; then
+            connection_string="$(gcloud secrets versions access latest --secret="$CONNECTION_STRING_SM")"
+            echo "::add-mask::$connection_string"
+            from_args+=(--from-literal=ConnectionStrings__DefaultConnection="$connection_string")
+          fi
+
+          if [[ -n "${SERVICE_AUTH_SM}" ]]; then
+            service_auth="$(gcloud secrets versions access latest --secret="$SERVICE_AUTH_SM")"
+          else
+            service_auth="${SERVICE_AUTH_KEY}"
+          fi
+          if [[ -z "${service_auth}" ]]; then
+            echo "ServiceAuth faltando: informe service_auth_sm_secret ou o org secret SERVICE_AUTH_KEY" >&2
+            exit 1
+          fi
+          echo "::add-mask::$service_auth"
+          from_args+=(--from-literal=ServiceAuth__Key="$service_auth")
+
+          kubectl create secret generic "$secret_name" \
+            --namespace "$K8S_NAMESPACE" \
+            "${from_args[@]}" \
+            --dry-run=client -o yaml \
+          | kubectl apply -f -
 
       - name: Aplicar manifests
         env:
