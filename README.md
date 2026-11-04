@@ -111,7 +111,7 @@ jobs:
 
 ### deploy
 
-O reusable aplica `k8s/namespace.yaml`, `serviceaccount.yaml`, sincroniza o **Secret Kubernetes** da app (Secret Manager + org secrets), depois `configmap.yaml` (envsubst `DD_SITE`), `deployment.yaml` (envsubst `IMAGE` / `DD_VERSION`), `service.yaml`, `hpa.yaml` e `httproute.yaml` quando existirem; faz rollout e smoke.
+O reusable aplica `k8s/namespace.yaml`, `serviceaccount.yaml`, sincroniza o **Secret Kubernetes** da app (Secret Manager + org secrets), depois `configmap.yaml` (envsubst `DD_SITE`), `deployment.yaml` (envsubst `IMAGE` / `DD_VERSION`), `service.yaml`, `hpa.yaml`, `httproute.yaml` e `healthcheckpolicy.yaml` quando existirem; faz rollout e smoke.
 
 Por padrão (`sync_app_secret: true`) o Secret no cluster fica com:
 
