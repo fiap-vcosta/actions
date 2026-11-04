@@ -76,6 +76,20 @@ jobs:
 
 ### build-push
 
+O reusable faz `docker build` com BuildKit e monta o secret `nuget_token` a partir de `GITHUB_TOKEN` (`packages: read`), para o restore do pacote `building-blocks` no GitHub Packages. O `Dockerfile` do serviço precisa seguir o contrato do [`building-blocks`](https://github.com/fiap-vcosta/building-blocks#docker-build-com-secret-mount):
+
+```dockerfile
+# syntax=docker/dockerfile:1
+RUN --mount=type=secret,id=nuget_token \
+    dotnet nuget update source github \
+      --username github \
+      --password-stdin \
+      --store-password-in-clear-text < /run/secrets/nuget_token \
+ && dotnet restore
+```
+
+O caller precisa conceder `packages: read` no job (o reusable já declara a mesma permissão).
+
 ```yaml
 name: build-push
 
@@ -86,6 +100,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  packages: read
 
 jobs:
   build-push:
@@ -178,6 +193,8 @@ Concurrency de apply/destroy: declarar no workflow caller, não nestes reusables
 | `smoke_url` | deploy |
 | `k8s_namespace` | não (`tech-challenge`) |
 | `image_tag` | não (`latest`) |
+
+`build-push` usa BuildKit secret `id=nuget_token` (`NUGET_AUTH_TOKEN` = `github.token`). Caller e reusable precisam de `packages: read`.
 
 ## Fora de escopo
 
