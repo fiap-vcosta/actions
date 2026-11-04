@@ -111,7 +111,15 @@ jobs:
 
 ### deploy
 
-O reusable aplica `k8s/namespace.yaml`, `serviceaccount.yaml`, `configmap.yaml` (envsubst `DD_SITE`), `deployment.yaml` (envsubst `IMAGE` / `DD_VERSION`), `service.yaml`, `hpa.yaml` e `httproute.yaml` quando existirem; faz rollout e smoke. **Não** cria secrets da aplicação — o caller garante os secrets no cluster antes (job prévio ou outro fluxo).
+O reusable aplica `k8s/namespace.yaml`, `serviceaccount.yaml`, sincroniza o **Secret Kubernetes** da app (Secret Manager + org secrets), depois `configmap.yaml` (envsubst `DD_SITE`), `deployment.yaml` (envsubst `IMAGE` / `DD_VERSION`), `service.yaml`, `hpa.yaml` e `httproute.yaml` quando existirem; faz rollout e smoke.
+
+Por padrão (`sync_app_secret: true`) o Secret no cluster fica com:
+
+| Key | Origem |
+|-----|--------|
+| `DD_API_KEY` | org/repo secret `DD_API_KEY` |
+| `ConnectionStrings__DefaultConnection` | Secret Manager (`connection_string_sm_secret`), se informado |
+| `ServiceAuth__Key` | Secret Manager (`service_auth_sm_secret`) ou fallback org secret `SERVICE_AUTH_KEY` |
 
 ```yaml
 name: deploy
@@ -130,6 +138,10 @@ jobs:
       image_name: administrativo-service
       deployment_name: administrativo-service
       smoke_url: https://api.example.com/administrativo/health
+      connection_string_sm_secret: administrativo-service-connection-string
+      service_auth_sm_secret: administrativo-service-service-auth-key
+    secrets:
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
 ```
 
 ### tf-apply / tf-destroy

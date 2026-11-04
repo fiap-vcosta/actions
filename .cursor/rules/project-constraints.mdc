@@ -6,6 +6,7 @@ alwaysApply: true
 # Restrições do projeto (`actions`)
 
 - Escopo: **reusable workflows** de CI/CD (`workflow_call`). Callers nos repos consumidores.
+- `deploy` sincroniza o Secret Kubernetes a partir do Secret Manager / org secrets (como o legado da `api`); não versionar valores de secret no Git.
 - Sem `tf-apply` / `tf-destroy` para o `infra-bootstrap`.
 - Sem WIF neste repo (`actions` fora de `ci_repositories`).
 - `building-blocks` não consome estes workflows.
