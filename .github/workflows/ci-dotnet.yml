@@ -53,6 +53,9 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    env:
+      # nuget.config consumers expand %NUGET_AUTH_TOKEN% on restore/build/test
+      NUGET_AUTH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -163,6 +166,8 @@ jobs:
   unit-tests:
     name: Unit tests
     runs-on: ubuntu-latest
+    env:
+      NUGET_AUTH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -250,6 +255,8 @@ jobs:
   integration-tests:
     name: Integration tests
     runs-on: ubuntu-latest
+    env:
+      NUGET_AUTH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -293,6 +300,8 @@ jobs:
   sonar:
     name: SonarCloud
     runs-on: ubuntu-latest
+    env:
+      NUGET_AUTH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
