@@ -25,6 +25,7 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  packages: read
 
 jobs:
   build-push:
@@ -66,10 +67,13 @@ jobs:
       - name: Build e push
         env:
           IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPOSITORY }}/${{ inputs.image_name }}
+          NUGET_AUTH_TOKEN: ${{ github.token }}
+          DOCKER_BUILDKIT: "1"
         run: |
           tag="${GITHUB_SHA::7}"
           docker build \
             --file "${{ inputs.dockerfile }}" \
+            --secret id=nuget_token,env=NUGET_AUTH_TOKEN \
             --tag "$IMAGE:$tag" \
             --tag "$IMAGE:latest" \
             "${{ inputs.context }}"
