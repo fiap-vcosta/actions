@@ -186,7 +186,7 @@ jobs:
           if [[ -f k8s/deployment.yaml ]]; then
             apply_rendered k8s/deployment.yaml '${IMAGE} ${DD_VERSION}'
           fi
-          for manifest in k8s/service.yaml k8s/hpa.yaml k8s/httproute.yaml; do
+          for manifest in k8s/service.yaml k8s/hpa.yaml k8s/httproute.yaml k8s/healthcheckpolicy.yaml; do
             if [[ -f "$manifest" ]]; then
               kubectl apply -f "$manifest"
             fi
