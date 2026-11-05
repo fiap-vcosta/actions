@@ -45,6 +45,11 @@ on:
         type: string
         required: false
         default: ""
+      jwt_signing_key_sm_secret:
+        description: Id do secret no Secret Manager com Jwt__SigningKeyPem (vazio = omitir)
+        type: string
+        required: false
+        default: ""
     secrets:
       DD_API_KEY:
         description: API key Datadog (org)
@@ -123,6 +128,7 @@ jobs:
           DEPLOYMENT_NAME: ${{ inputs.deployment_name }}
           CONNECTION_STRING_SM: ${{ inputs.connection_string_sm_secret }}
           SERVICE_AUTH_SM: ${{ inputs.service_auth_sm_secret }}
+          JWT_SIGNING_KEY_SM: ${{ inputs.jwt_signing_key_sm_secret }}
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           SERVICE_AUTH_KEY: ${{ secrets.SERVICE_AUTH_KEY }}
         run: |
@@ -154,6 +160,12 @@ jobs:
           fi
           echo "::add-mask::$service_auth"
           from_args+=(--from-literal=ServiceAuth__Key="$service_auth")
+
+          if [[ -n "${JWT_SIGNING_KEY_SM}" ]]; then
+            jwt_signing_key="$(gcloud secrets versions access latest --secret="$JWT_SIGNING_KEY_SM")"
+            echo "::add-mask::$jwt_signing_key"
+            from_args+=(--from-literal=Jwt__SigningKeyPem="$jwt_signing_key")
+          fi
 
           kubectl create secret generic "$secret_name" \
             --namespace "$K8S_NAMESPACE" \

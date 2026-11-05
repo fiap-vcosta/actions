@@ -120,6 +120,7 @@ Por padrão (`sync_app_secret: true`) o Secret no cluster fica com:
 | `DD_API_KEY` | org/repo secret `DD_API_KEY` |
 | `ConnectionStrings__DefaultConnection` | Secret Manager (`connection_string_sm_secret`), se informado |
 | `ServiceAuth__Key` | Secret Manager (`service_auth_sm_secret`) ou fallback org secret `SERVICE_AUTH_KEY` |
+| `Jwt__SigningKeyPem` | Secret Manager (`jwt_signing_key_sm_secret`), se informado |
 
 ```yaml
 name: deploy
@@ -205,6 +206,7 @@ Concurrency de apply/destroy: declarar no workflow caller, não nestes reusables
 | `smoke_url` | deploy |
 | `k8s_namespace` | não (`tech-challenge`) |
 | `image_tag` | não (`latest`) |
+| `jwt_signing_key_sm_secret` | não (vazio = omitir `Jwt__SigningKeyPem`) |
 
 `build-push` usa BuildKit secret `id=nuget_token` (`NUGET_AUTH_TOKEN` = `github.token`). Caller e reusable precisam de `packages: read`.
 
