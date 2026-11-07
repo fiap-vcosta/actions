@@ -1,0 +1,12 @@
+---
+description: Não driblar Sonar/lint/CI com pragma, suppressions ou remoção de testes
+alwaysApply: true
+---
+
+# Honesty no quality gate
+
+- **Nunca** silenciar Sonar, Roslyn, InspectCode ou outro analyzer com `#pragma warning`, `[SuppressMessage]`, `GlobalSuppressions`, exclusões ad hoc no Sonar ou regras “só para passar o CI”.
+- **Nunca** apagar, pular (`Skip`) ou enfraquecer testes só para verde no CI/cobertura. Se o código sob teste sumiu de verdade (feature removida), aí o teste correspondente pode sair — com o mesmo motivo no commit, não “para o gate passar”.
+- Ação correta: corrigir o código (ou o teste) para atender a regra. Ex.: CA1861 → extrair `static readonly`; namespace → alinhar pasta/namespace; cobertura baixa → cobrir o comportamento que falta.
+- Pragmas/suppressions **já gerados pelo tooling** (ex. `#pragma warning disable 612, 618` em Designer EF) podem permanecer; não expandir essa lista para aplacar findings novos.
+- Se a regra parecer falsa positiva de verdade: **perguntar** antes de qualquer suppress; não decidir sozinho.
