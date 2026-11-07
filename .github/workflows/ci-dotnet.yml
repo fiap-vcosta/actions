@@ -329,13 +329,16 @@ jobs:
       - name: Begin SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          # Free SonarCloud: QG wait on non-main branch analysis is denied.
+          # Wait only on PRs and main; feature-branch pushes still upload analysis.
+          SONAR_QG_WAIT: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
         run: |
           dotnet tool run dotnet-sonarscanner begin \
             /k:"${{ inputs.sonar_project_key }}" \
             /o:"fiap-vcosta" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.token="${SONAR_TOKEN}" \
-            /d:sonar.qualitygate.wait=true \
+            /d:sonar.qualitygate.wait="${SONAR_QG_WAIT}" \
             /d:sonar.cs.cobertura.reportsPaths="${GITHUB_WORKSPACE}/test-results/coverage/coverage.cobertura.xml"
 
       - name: Build
