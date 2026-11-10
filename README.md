@@ -121,8 +121,8 @@ Por padrão (`sync_app_secret: true`) o Secret no cluster fica com:
 | `ConnectionStrings__DefaultConnection` | Secret Manager (`connection_string_sm_secret`), se informado |
 | `ServiceAuth__Key` | Secret Manager (`service_auth_sm_secret`) ou fallback org secret `SERVICE_AUTH_KEY` |
 | `Jwt__SigningKeyPem` | Secret Manager (`jwt_signing_key_sm_secret`), se informado |
-| `MercadoPago__AccessToken` | Secret Manager (`mercado_pago_access_token_sm_secret`), se informado |
-| `MercadoPago__WebhookSecret` | Secret Manager (`mercado_pago_webhook_secret_sm_secret`), se informado |
+| `MercadoPago__AccessToken` | org/repo secret `MERCADO_PAGO_ACCESS_TOKEN`, se informado |
+| `MercadoPago__WebhookSecret` | org/repo secret `MERCADO_PAGO_WEBHOOK_SECRET`, se informado |
 
 ```yaml
 name: deploy
@@ -209,8 +209,13 @@ Concurrency de apply/destroy: declarar no workflow caller, não nestes reusables
 | `k8s_namespace` | não (`tech-challenge`) |
 | `image_tag` | não (`latest`) |
 | `jwt_signing_key_sm_secret` | não (vazio = omitir `Jwt__SigningKeyPem`) |
-| `mercado_pago_access_token_sm_secret` | não (vazio = omitir `MercadoPago__AccessToken`) |
-| `mercado_pago_webhook_secret_sm_secret` | não (vazio = omitir `MercadoPago__WebhookSecret`) |
+
+Secrets opcionais do `deploy` (além de `DD_API_KEY` / `SERVICE_AUTH_KEY`):
+
+| Secret | Papel |
+|--------|--------|
+| `MERCADO_PAGO_ACCESS_TOKEN` | `MercadoPago__AccessToken` (vazio = omitir) |
+| `MERCADO_PAGO_WEBHOOK_SECRET` | `MercadoPago__WebhookSecret` (vazio = omitir) |
 
 `build-push` usa BuildKit secret `id=nuget_token` (`NUGET_AUTH_TOKEN` = `github.token`). Caller e reusable precisam de `packages: read`.
 
