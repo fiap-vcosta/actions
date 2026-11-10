@@ -50,22 +50,18 @@ on:
         type: string
         required: false
         default: ""
-      mercado_pago_access_token_sm_secret:
-        description: Id do secret no Secret Manager com MercadoPago__AccessToken (vazio = omitir)
-        type: string
-        required: false
-        default: ""
-      mercado_pago_webhook_secret_sm_secret:
-        description: Id do secret no Secret Manager com MercadoPago__WebhookSecret (vazio = omitir)
-        type: string
-        required: false
-        default: ""
     secrets:
       DD_API_KEY:
         description: API key Datadog (org)
         required: false
       SERVICE_AUTH_KEY:
         description: Fallback de X-Service-Key quando service_auth_sm_secret está vazio
+        required: false
+      MERCADO_PAGO_ACCESS_TOKEN:
+        description: Access token Mercado Pago (vazio = omitir MercadoPago__AccessToken)
+        required: false
+      MERCADO_PAGO_WEBHOOK_SECRET:
+        description: Segredo de assinatura do webhook Mercado Pago (vazio = omitir MercadoPago__WebhookSecret)
         required: false
 
 concurrency:
@@ -139,10 +135,10 @@ jobs:
           CONNECTION_STRING_SM: ${{ inputs.connection_string_sm_secret }}
           SERVICE_AUTH_SM: ${{ inputs.service_auth_sm_secret }}
           JWT_SIGNING_KEY_SM: ${{ inputs.jwt_signing_key_sm_secret }}
-          MERCADO_PAGO_ACCESS_TOKEN_SM: ${{ inputs.mercado_pago_access_token_sm_secret }}
-          MERCADO_PAGO_WEBHOOK_SECRET_SM: ${{ inputs.mercado_pago_webhook_secret_sm_secret }}
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           SERVICE_AUTH_KEY: ${{ secrets.SERVICE_AUTH_KEY }}
+          MERCADO_PAGO_ACCESS_TOKEN: ${{ secrets.MERCADO_PAGO_ACCESS_TOKEN }}
+          MERCADO_PAGO_WEBHOOK_SECRET: ${{ secrets.MERCADO_PAGO_WEBHOOK_SECRET }}
         run: |
           set -euo pipefail
           secret_name="${SECRET_NAME:-$DEPLOYMENT_NAME}"
@@ -179,16 +175,14 @@ jobs:
             from_args+=(--from-literal=Jwt__SigningKeyPem="$jwt_signing_key")
           fi
 
-          if [[ -n "${MERCADO_PAGO_ACCESS_TOKEN_SM}" ]]; then
-            mercado_pago_access_token="$(gcloud secrets versions access latest --secret="$MERCADO_PAGO_ACCESS_TOKEN_SM")"
-            echo "::add-mask::$mercado_pago_access_token"
-            from_args+=(--from-literal=MercadoPago__AccessToken="$mercado_pago_access_token")
+          if [[ -n "${MERCADO_PAGO_ACCESS_TOKEN}" ]]; then
+            echo "::add-mask::$MERCADO_PAGO_ACCESS_TOKEN"
+            from_args+=(--from-literal=MercadoPago__AccessToken="$MERCADO_PAGO_ACCESS_TOKEN")
           fi
 
-          if [[ -n "${MERCADO_PAGO_WEBHOOK_SECRET_SM}" ]]; then
-            mercado_pago_webhook_secret="$(gcloud secrets versions access latest --secret="$MERCADO_PAGO_WEBHOOK_SECRET_SM")"
-            echo "::add-mask::$mercado_pago_webhook_secret"
-            from_args+=(--from-literal=MercadoPago__WebhookSecret="$mercado_pago_webhook_secret")
+          if [[ -n "${MERCADO_PAGO_WEBHOOK_SECRET}" ]]; then
+            echo "::add-mask::$MERCADO_PAGO_WEBHOOK_SECRET"
+            from_args+=(--from-literal=MercadoPago__WebhookSecret="$MERCADO_PAGO_WEBHOOK_SECRET")
           fi
 
           kubectl create secret generic "$secret_name" \
