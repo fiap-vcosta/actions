@@ -50,6 +50,16 @@ on:
         type: string
         required: false
         default: ""
+      mercado_pago_access_token_sm_secret:
+        description: Id do secret no Secret Manager com MercadoPago__AccessToken (vazio = omitir)
+        type: string
+        required: false
+        default: ""
+      mercado_pago_webhook_secret_sm_secret:
+        description: Id do secret no Secret Manager com MercadoPago__WebhookSecret (vazio = omitir)
+        type: string
+        required: false
+        default: ""
     secrets:
       DD_API_KEY:
         description: API key Datadog (org)
@@ -129,6 +139,8 @@ jobs:
           CONNECTION_STRING_SM: ${{ inputs.connection_string_sm_secret }}
           SERVICE_AUTH_SM: ${{ inputs.service_auth_sm_secret }}
           JWT_SIGNING_KEY_SM: ${{ inputs.jwt_signing_key_sm_secret }}
+          MERCADO_PAGO_ACCESS_TOKEN_SM: ${{ inputs.mercado_pago_access_token_sm_secret }}
+          MERCADO_PAGO_WEBHOOK_SECRET_SM: ${{ inputs.mercado_pago_webhook_secret_sm_secret }}
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           SERVICE_AUTH_KEY: ${{ secrets.SERVICE_AUTH_KEY }}
         run: |
@@ -165,6 +177,18 @@ jobs:
             jwt_signing_key="$(gcloud secrets versions access latest --secret="$JWT_SIGNING_KEY_SM")"
             echo "::add-mask::$jwt_signing_key"
             from_args+=(--from-literal=Jwt__SigningKeyPem="$jwt_signing_key")
+          fi
+
+          if [[ -n "${MERCADO_PAGO_ACCESS_TOKEN_SM}" ]]; then
+            mercado_pago_access_token="$(gcloud secrets versions access latest --secret="$MERCADO_PAGO_ACCESS_TOKEN_SM")"
+            echo "::add-mask::$mercado_pago_access_token"
+            from_args+=(--from-literal=MercadoPago__AccessToken="$mercado_pago_access_token")
+          fi
+
+          if [[ -n "${MERCADO_PAGO_WEBHOOK_SECRET_SM}" ]]; then
+            mercado_pago_webhook_secret="$(gcloud secrets versions access latest --secret="$MERCADO_PAGO_WEBHOOK_SECRET_SM")"
+            echo "::add-mask::$mercado_pago_webhook_secret"
+            from_args+=(--from-literal=MercadoPago__WebhookSecret="$mercado_pago_webhook_secret")
           fi
 
           kubectl create secret generic "$secret_name" \
