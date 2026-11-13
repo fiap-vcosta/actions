@@ -4,6 +4,16 @@ Reusable workflows de CI/CD da org [fiap-vcosta](https://github.com/fiap-vcosta)
 
 Os repositórios consumidores ficam só com callers finos apontando para `@main`. Um push nesta `main` atualiza todos. Este repositório **não** entra em `ci_repositories` (sem WIF próprio) e **não** expõe `tf-apply` / `tf-destroy` para o `infra-bootstrap` (apply do bootstrap continua só local, por owner).
 
+## CI automático × CD manual (custo)
+
+| Workflow | Gatilho típico | Automático? |
+|----------|----------------|-------------|
+| `ci-dotnet` / `ci-terraform` | PR / push | **Sim** |
+| `build-push` | Merge em `main` do serviço | **Sim** |
+| `deploy` / `tf-apply` / `tf-destroy` | `workflow_dispatch` no caller | **Manual** |
+
+GKE, Cloud SQL e LBs só sobem na janela de demo (`demo-up` no [`e2e`](https://github.com/fiap-vcosta/e2e)). Não há apply/deploy em todo merge de propósito — evita custo GCP no trabalho contínuo. Narrativa: [`e2e` ADR 006](https://github.com/fiap-vcosta/e2e/blob/main/docs/adrs/006-deploy-demo-manuais-custo.md).
+
 ## Workflows
 
 | Arquivo | Uso |
@@ -158,7 +168,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: terraform-infra-db
+  group: terraform-infra-events
   cancel-in-progress: false
 
 permissions:
